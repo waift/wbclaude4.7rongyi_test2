@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PIXEL MATCH-3</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    width: 100%;
+    min-height: 100vh;
+    background: #1a1c2c;
+    font-family: 'Press Start 2P', 'Courier New', monospace;
+    color: #f4f4f4;
+    overflow-x: hidden;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 16px 12px 24px;
+    background:
+      repeating-linear-gradient(0deg, transparent 0, transparent 3px, rgba(255,255,255,0.02) 3px, rgba(255,255,255,0.02) 4px),
+      linear-gradient(180deg, #1a1c2c 0%, #29366f 100%);
+  }
+
+  .scanline {
+    position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px);
+  }
+
+  .title {
+    font-size: 18px;
+    color: #ffcd75;
+    text-shadow: 2px 2px 0 #b13e53, 4px 4px 0 #29366f;
+    letter-spacing: 2px;
+    margin: 8px 0 14px;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .hud {
+    width: 100%;
+    max-width: 420px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+
+  .hud-card {
+    background: #29366f;
+    border: 3px solid #41a6f6;
+    box-shadow: inset -3px -3px 0 #1a1c2c, 3px 3px 0 #000;
+    padding: 8px 4px;
+    text-align: center;
+  }
+  .hud-label { font-size: 8px; color: #94b0c2; margin-bottom: 4px; letter-spacing: 1px; }
+  .hud-value { font-size: 12px; color: #ffcd75; }
+  .hud-card.combo { border-color: #b13e53; }
+  .hud-card.combo .hud-value { color: #ff77a8; }
+  .hud-card.moves { border-color: #38b764; }
+  .hud-card.moves .hud-value { color: #a7f070; }
+
+  .stage {
+    position: relative;
+    background: #000;
+    border: 4px solid #f4f4f4;
+    box-shadow:
+      inset 0 0 0 2px #1a1c2c,
+      inset 0 0 0 4px #41a6f6,
+      6px 6px 0 #b13e53,
+      8px 8px 0 #000;
+    padding: 6px;
+    touch-action: none;
+  }
+
+  #board {
+    display: block;
+    background: #1a1c2c;
+    image-rendering: pixelated;
+  }
+
+  .footer {
+    margin-top: 14px;
+    font-size: 8px;
+    color: #94b0c2;
+    text-align: center;
+    line-height: 1.8;
+    letter-spacing: 1px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .btn {
+    font-family: inherit;
+    font-size: 10px;
+    color: #f4f4f4;
+    background: #29366f;
+    border: 3px solid #41a6f6;
+    box-shadow: inset -2px -2px 0 #1a1c2c, 3px 3px 0 #000;
+    padding: 10px 14px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: transform .05s;
+  }
+  .btn:active { transform: translate(2px, 2px); box-shadow: inset -2px -2px 0 #1a1c2c, 1px 1px 0 #000; }
+  .btn.primary { background: #b13e53; border-color: #ff77a8; }
+  .btn.success { background: #257179; border-color: #38b764; }
+
+  /* overlay (game over) */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(26, 28, 44, 0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+  }
+  .overlay.show { display: flex; }
+  .panel {
+    background: #1a1c2c;
+    border: 4px solid #ffcd75;
+    box-shadow: 6px 6px 0 #b13e53, 8px 8px 0 #000;
+    padding: 22px 24px;
+    text-align: center;
+    max-width: 320px;
+    width: 86%;
+  }
+  .panel h2 { font-size: 16px; color: #ffcd75; margin-bottom: 14px; letter-spacing: 2px; }
+  .panel .stat { font-size: 10px; color: #f4f4f4; margin: 8px 0; }
+  .panel .stat b { color: #a7f070; }
+  .panel .best { color: #ff77a8; }
+
+  /* combo flash */
+  .combo-flash {
+    position: absolute;
+    pointer-events: none;
+    font-size: 14px;
+    color: #ffcd75;
+    text-shadow: 2px 2px 0 #b13e53;
+    animation: floatUp .9s ease-out forwards;
+    z-index: 5;
+    letter-spacing: 1px;
+  }
+  @keyframes floatUp {
+    0% { transform: translateY(0) scale(0.8); opacity: 0; }
+    20% { transform: translateY(-4px) scale(1.1); opacity: 1; }
+    100% { transform: translateY(-46px) scale(1); opacity: 0; }
+  }
+
+  @media (max-height: 700px) {
+    .title { font-size: 14px; margin: 4px 0 8px; }
+    .hud-card { padding: 6px 2px; }
+    .hud-value { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+  <div class="scanline"></div>
+
+  <h1 class="title">PIXEL<br>MATCH-3</h1>
+
+  <div class="hud">
+    <div class="hud-card">
+      <div class="hud-label">SCORE</div>
+      <div class="hud-value" id="score">0</div>
+    </div>
+    <div class="hud-card moves">
+      <div class="hud-label">MOVES</div>
+      <div class="hud-value" id="moves">30</div>
+    </div>
+    <div class="hud-card combo">
+      <div class="hud-label">COMBO</div>
+      <div class="hud-value" id="combo">x1</div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <canvas id="board" width="384" height="384"></canvas>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn primary" id="restart">RESTART</button>
+    <button class="btn success" id="shuffle">SHUFFLE</button>
+  </div>
+
+  <div class="footer">
+    SWAP ADJACENT GEMS<br>
+    MATCH 3+ TO SCORE
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="panel">
+      <h2 id="ovTitle">GAME OVER</h2>
+      <div class="stat">SCORE: <b id="ovScore">0</b></div>
+      <div class="stat best">BEST:&nbsp; <span id="ovBest">0</span></div>
+      <div class="stat" id="ovBonus" style="display:none;">+<b id="ovBonusVal">0</b> COMBO BONUS</div>
+      <div style="margin-top: 14px;">
+        <button class="btn primary" id="ovRestart">PLAY AGAIN</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- CONFIG ----------
+  const SIZE = 8;
+  const TILE = 48;            // 8 * 48 = 384
+  const TYPES = 6;
+  const START_MOVES = 30;
+  const SCORE_PER_GEM = 10;
+  const PALETTE = {
+    bg: '#1a1c2c',
+    grid1: '#1a1c2c',
+    grid2: '#222447',
+    sel: '#ffcd75',
+    hint: '#41a6f6'
+  };
+  // 6 gem colors (retro pico-8 inspired)
+  const GEMS = [
+    { core: '#b13e53', light: '#ff77a8', dark: '#5d275d', shape: 'heart'   }, // red
+    { core: '#41a6f6', light: '#a7e8ff', dark: '#29366f', shape: 'diamond' }, // blue
+    { core: '#38b764', light: '#a7f070', dark: '#257179', shape: 'square'  }, // green
+    { core: '#ffcd75', light: '#ffffe6', dark: '#b06a3b', shape: 'star'    }, // yellow
+    { core: '#94b0c2', light: '#f4f4f4', dark: '#566c86', shape: 'circle'  }, // white
+    { core: '#73eff7', light: '#dfffff', dark: '#3b5dc9', shape: 'triangle'}  // cyan
+  ];
+
+  // ---------- STATE ----------
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  let grid = [];          // grid[r][c] = type | -1
+  let score = 0;
+  let moves = START_MOVES;
+  let combo = 1;
+  let comboTimer = 0;
+  let busy = false;       // animation lock
+  let selected = null;    // {r,c}
+  let best = +(localStorage.getItem('pixel_match3_best') || 0);
+
+  // Animation queues: each tile carries optional anim state
+  let animState = [];     // animState[r][c] = { dy: pixels offset, dx: pixels offset, scale, alpha }
+  let particles = [];     // for clear effects
+
+  // ---------- INIT ----------
+  function makeAnimState() {
+    const a = [];
+    for (let r = 0; r < SIZE; r++) {
+      a[r] = [];
+      for (let c = 0; c < SIZE; c++) a[r][c] = { dx: 0, dy: 0, scale: 1, alpha: 1 };
+    }
+    return a;
+  }
+
+  function newGrid() {
+    grid = [];
+    for (let r = 0; r < SIZE; r++) {
+      grid[r] = [];
+      for (let c = 0; c < SIZE; c++) {
+        let t;
+        do {
+          t = (Math.random() * TYPES) | 0;
+        } while (
+          (c >= 2 && grid[r][c-1] === t && grid[r][c-2] === t) ||
+          (r >= 2 && grid[r-1][c] === t && grid[r-2][c] === t)
+        );
+        grid[r][c] = t;
+      }
+    }
+    animState = makeAnimState();
+    if (!hasAnyMove()) shuffleBoard(false);
+  }
+
+  // ---------- DRAWING ----------
+  function drawBackground() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        ctx.fillStyle = ((r + c) & 1) ? PALETTE.grid1 : PALETTE.grid2;
+        ctx.fillRect(c * TILE, r * TILE, TILE, TILE);
+      }
+    }
+  }
+
+  function drawSelection() {
+    if (!selected) return;
+    const { r, c } = selected;
+    const t = (performance.now() / 100) | 0;
+    ctx.fillStyle = PALETTE.sel;
+    // dashed border (pixel-style)
+    const x = c * TILE, y = r * TILE;
+    for (let i = 0; i < TILE; i += 4) {
+      if (((i + t) >> 1) & 1) {
+        ctx.fillRect(x + i, y, 2, 2);
+        ctx.fillRect(x + i, y + TILE - 2, 2, 2);
+        ctx.fillRect(x, y + i, 2, 2);
+        ctx.fillRect(x + TILE - 2, y + i, 2, 2);
+      }
+    }
+  }
+
+  function drawGem(type, cx, cy, scale, alpha) {
+    if (alpha <= 0) return;
+    const g = GEMS[type];
+    ctx.globalAlpha = alpha;
+    const s = scale;
+    const half = (TILE * 0.4) * s;        // gem radius in pixels
+    const px = Math.round(cx);
+    const py = Math.round(cy);
+
+    // shadow underneath (pixel)
+    ctx.fillStyle = '#000';
+    pixelShape(g.shape, px + 2, py + 2, half, '#000');
+
+    // dark base
+    pixelShape(g.shape, px, py, half, g.dark);
+
+    // core
+    pixelShape(g.shape, px, py, half * 0.85, g.core);
+
+    // highlight
+    pixelShape(g.shape, px - half * 0.25, py - half * 0.25, half * 0.35, g.light);
+
+    // tiny shine pixel
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(px - Math.round(half * 0.45), py - Math.round(half * 0.45), 2, 2);
+
+    ctx.globalAlpha = 1;
+  }
+
+  // pixel shape rasterizer — uses pixel chunks (4px) for retro feel
+  function pixelShape(shape, cx, cy, radius, color) {
+    const p = 3;  // pixel size
+    const r = Math.max(2, radius);
+    ctx.fillStyle = color;
+    for (let y = -r; y <= r; y += p) {
+      for (let x = -r; x <= r; x += p) {
+        const nx = x / r, ny = y / r;
+        let inside = false;
+        switch (shape) {
+          case 'heart': {
+            // heart approximation
+            const xa = Math.abs(nx);
+            inside = (Math.pow(xa - 0.4, 2) + Math.pow(ny + 0.1, 2) < 0.18) ||
+                     (xa < 0.6 && ny > -0.1 && ny < 0.7 && (xa + ny < 0.95));
+            break;
+          }
+          case 'diamond':
+            inside = Math.abs(nx) + Math.abs(ny) <= 0.95;
+            break;
+          case 'square':
+            inside = Math.abs(nx) <= 0.85 && Math.abs(ny) <= 0.85;
+            break;
+          case 'star': {
+            const a = Math.atan2(ny, nx);
+            const d = Math.sqrt(nx*nx + ny*ny);
+            const pts = 5;
+            const k = Math.cos(a * pts);
+            inside = d <= 0.55 + 0.4 * Math.max(0, k);
+            break;
+          }
+          case 'circle':
+            inside = nx*nx + ny*ny <= 0.85*0.85;
+            break;
+          case 'triangle':
+            inside = (ny <= 0.7) && (ny >= -0.7) && (Math.abs(nx) <= (0.7 - ny) / 1.4 * 1.1);
+            break;
+        }
+        if (inside) ctx.fillRect(Math.round(cx + x), Math.round(cy + y), p, p);
+      }
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = p.life;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(Math.round(p.x), Math.round(p.y), p.s, p.s);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function render() {
+    drawBackground();
+    drawSelection();
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const t = grid[r][c];
+        if (t < 0) continue;
+        const a = animState[r][c];
+        const cx = c * TILE + TILE / 2 + a.dx;
+        const cy = r * TILE + TILE / 2 + a.dy;
+        drawGem(t, cx, cy, a.scale, a.alpha);
+      }
+    }
+    drawParticles();
+  }
+
+  // ---------- ANIM LOOP ----------
+  let lastTs = 0;
+  function loop(ts) {
+    const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0);
+    lastTs = ts;
+
+    // advance particles
+    for (const p of particles) {
+      p.x += p.vx * dt * 60;
+      p.y += p.vy * dt * 60;
+      p.vy += 0.5;
+      p.life -= dt * 1.6;
+    }
+    particles = particles.filter(p => p.life > 0);
+
+    if (comboTimer > 0) {
+      comboTimer -= dt;
+      if (comboTimer <= 0) { combo = 1; updateHUD(); }
+    }
+
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- MATCH LOGIC ----------
+  function findMatches() {
+    const matched = [];
+    for (let r = 0; r < SIZE; r++) matched.push(new Array(SIZE).fill(false));
+
+    // horizontal
+    for (let r = 0; r < SIZE; r++) {
+      let run = 1;
+      for (let c = 1; c <= SIZE; c++) {
+        if (c < SIZE && grid[r][c] !== -1 && grid[r][c] === grid[r][c-1]) {
+          run++;
+        } else {
+          if (run >= 3) for (let k = c - run; k < c; k++) matched[r][k] = true;
+          run = 1;
+        }
+      }
+    }
+    // vertical
+    for (let c = 0; c < SIZE; c++) {
+      let run = 1;
+      for (let r = 1; r <= SIZE; r++) {
+        if (r < SIZE && grid[r][c] !== -1 && grid[r][c] === grid[r-1][c]) {
+          run++;
+        } else {
+          if (run >= 3) for (let k = r - run; k < r; k++) matched[k][c] = true;
+          run = 1;
+        }
+      }
+    }
+    return matched;
+  }
+
+  function countMatched(m) {
+    let n = 0;
+    for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) if (m[r][c]) n++;
+    return n;
+  }
+
+  function hasMatchAt(r, c) {
+    const t = grid[r][c];
+    if (t < 0) return false;
+    // horizontal
+    let run = 1;
+    for (let i = c - 1; i >= 0 && grid[r][i] === t; i--) run++;
+    for (let i = c + 1; i < SIZE && grid[r][i] === t; i++) run++;
+    if (run >= 3) return true;
+    // vertical
+    run = 1;
+    for (let i = r - 1; i >= 0 && grid[i][c] === t; i--) run++;
+    for (let i = r + 1; i < SIZE && grid[i][c] === t; i++) run++;
+    return run >= 3;
+  }
+
+  function hasAnyMove() {
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        // try right swap
+        if (c + 1 < SIZE) {
+          [grid[r][c], grid[r][c+1]] = [grid[r][c+1], grid[r][c]];
+          const ok = hasMatchAt(r, c) || hasMatchAt(r, c+1);
+          [grid[r][c], grid[r][c+1]] = [grid[r][c+1], grid[r][c]];
+          if (ok) return true;
+        }
+        // try down swap
+        if (r + 1 < SIZE) {
+          [grid[r][c], grid[r+1][c]] = [grid[r+1][c], grid[r][c]];
+          const ok = hasMatchAt(r, c) || hasMatchAt(r+1, c);
+          [grid[r][c], grid[r+1][c]] = [grid[r+1][c], grid[r][c]];
+          if (ok) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // ---------- ANIMATIONS ----------
+  function tween(setProgress, durationMs) {
+    return new Promise(res => {
+      const start = performance.now();
+      function step() {
+        const t = Math.min(1, (performance.now() - start) / durationMs);
+        // ease-out
+        const e = 1 - Math.pow(1 - t, 3);
+        setProgress(e);
+        if (t < 1) requestAnimationFrame(step);
+        else res();
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  async function animateSwap(a, b, reverse=false) {
+    const dx = (b.c - a.c) * TILE;
+    const dy = (b.r - a.r) * TILE;
+    await tween(p => {
+      animState[a.r][a.c].dx = dx * p;
+      animState[a.r][a.c].dy = dy * p;
+      animState[b.r][b.c].dx = -dx * p;
+      animState[b.r][b.c].dy = -dy * p;
+    }, 160);
+    animState[a.r][a.c].dx = animState[a.r][a.c].dy = 0;
+    animState[b.r][b.c].dx = animState[b.r][b.c].dy = 0;
+  }
+
+  async function animateClear(matched) {
+    // particles + scale-down
+    const promises = [];
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (matched[r][c]) {
+          const t = grid[r][c];
+          const g = GEMS[t];
+          // spawn particles
+          for (let k = 0; k < 5; k++) {
+            particles.push({
+              x: c * TILE + TILE / 2,
+              y: r * TILE + TILE / 2,
+              vx: (Math.random() - 0.5) * 4,
+              vy: (Math.random() - 0.5) * 4 - 1,
+              s: 3,
+              color: k % 2 === 0 ? g.light : g.core,
+              life: 1
+            });
+          }
+          const rr = r, cc = c;
+          promises.push(tween(p => {
+            animState[rr][cc].scale = 1 - p;
+            animState[rr][cc].alpha = 1 - p;
+          }, 220));
+        }
+      }
+    }
+    await Promise.all(promises);
+    // clear
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        if (matched[r][c]) {
+          grid[r][c] = -1;
+          animState[r][c].scale = 1;
+          animState[r][c].alpha = 1;
+        }
+      }
+    }
+  }
+
+  async function animateDropAndRefill() {
+    // collapse: for each column, move non-empty cells down
+    const drops = []; // list of (r,c,fromRow) positions to animate
+    const newSpawns = []; // (r,c) of newly added gems
+
+    for (let c = 0; c < SIZE; c++) {
+      let writeR = SIZE - 1;
+      const stack = [];
+      for (let r = SIZE - 1; r >= 0; r--) {
+        if (grid[r][c] !== -1) stack.push(grid[r][c]);
+      }
+      // fill column from bottom
+      let neededNew = SIZE - stack.length;
+      // first, place existing
+      for (let r = SIZE - 1; r >= 0; r--) {
+        if (stack.length > 0) {
+          const t = stack.shift();
+          // find original row (highest r such that was non-empty and not yet placed)
+          // simpler: just set after, animate from original position
+          grid[r][c] = t;
+        } else {
+          // new gem
+          const t = (Math.random() * TYPES) | 0;
+          grid[r][c] = t;
+          newSpawns.push({ r, c, fromOffset: -((neededNew--) + 0.5) * TILE });
+        }
+      }
+    }
+
+    // To animate cleanly, after rebuild we need offsets:
+    // We approximate by giving every gem a small drop offset based on column "fall amount".
+    // Simpler approach: detect gems whose anim is at scale 0/alpha 0 (just refilled) and drop from above.
+
+    // Set drop offsets: any cell whose alpha was reset to 1 just now should fall in.
+    // We'll mark all cells in board to fall from their current row's "missing height".
+    // Simple: set every cell's dy to negative based on column empties before.
+    // We'll just animate all spawned-new gems falling, plus pieces that moved down.
+
+    // Compute the offset by column: count empties in each column from top.
+    // Since after refill there are no empties, we'll instead store fall offsets by recording
+    // the source row before the refill. To keep things simple and visually nice, animate ALL
+    // gems with a small bounce + the new ones with bigger drop.
+
+    const promises = [];
+    for (const sp of newSpawns) {
+      const a = animState[sp.r][sp.c];
+      a.dy = sp.fromOffset;
+      a.scale = 1; a.alpha = 1;
+      const rr = sp.r, cc = sp.c;
+      promises.push(tween(p => {
+        animState[rr][cc].dy = sp.fromOffset * (1 - p);
+      }, 280));
+    }
+    // small jiggle for everyone (not necessary, skip)
+    await Promise.all(promises);
+    for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) animState[r][c].dy = 0;
+  }
+
+  // ---------- COMBO LOOP ----------
+  async function resolveBoard(initialCombo=1) {
+    combo = initialCombo;
+    let chain = 0;
+    while (true) {
+      const m = findMatches();
+      const n = countMatched(m);
+      if (n === 0) break;
+      chain++;
+      const gain = n * SCORE_PER_GEM * combo;
+      score += gain;
+      // floating combo text
+      if (chain >= 1) {
+        showFloatText(`+${gain}${combo > 1 ? '  COMBO x' + combo : ''}`, m);
+      }
+      updateHUD();
+
+      await animateClear(m);
+      await animateDropAndRefill();
+
+      combo++;
+      comboTimer = 1.5; // combo persists briefly
+    }
+    if (chain === 0) {
+      // no match — combo decays only via timer
+    } else {
+      // keep combo ticking, decay handled in loop
+    }
+    // Check no-move
+    if (!hasAnyMove()) {
+      showFloatText('SHUFFLE!', null);
+      shuffleBoard(true);
+    }
+  }
+
+  function showFloatText(text, matched) {
+    // attach DOM element above canvas at average matched location
+    const stage = canvas.parentElement;
+    let cx = canvas.offsetWidth / 2;
+    let cy = canvas.offsetHeight / 2;
+    if (matched) {
+      let sx = 0, sy = 0, n = 0;
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) {
+        if (matched[r][c]) { sx += c; sy += r; n++; }
+      }
+      if (n > 0) {
+        const scale = canvas.offsetWidth / canvas.width;
+        cx = ((sx / n + 0.5) * TILE) * scale;
+        cy = ((sy / n + 0.5) * TILE) * scale;
+      }
+    }
+    const el = document.createElement('div');
+    el.className = 'combo-flash';
+    el.textContent = text;
+    el.style.left = (cx - 30) + 'px';
+    el.style.top = (cy - 10) + 'px';
+    stage.appendChild(el);
+    setTimeout(() => el.remove(), 900);
+  }
+
+  // ---------- SHUFFLE ----------
+  function shuffleBoard(triggered) {
+    // randomize until valid (no initial matches and at least one move)
+    let attempt = 0;
+    do {
+      const flat = [];
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) flat.push(grid[r][c] >= 0 ? grid[r][c] : (Math.random() * TYPES) | 0);
+      for (let i = flat.length - 1; i > 0; i--) {
+        const j = (Math.random() * (i + 1)) | 0;
+        [flat[i], flat[j]] = [flat[j], flat[i]];
+      }
+      let k = 0;
+      for (let r = 0; r < SIZE; r++) for (let c = 0; c < SIZE; c++) grid[r][c] = flat[k++];
+      attempt++;
+      if (attempt > 200) break;
+    } while (countMatched(findMatches()) > 0 || !hasAnyMove());
+  }
+
+  // ---------- INPUT ----------
+  function getCellFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const c = Math.floor(px / TILE);
+    const r = Math.floor(py / TILE);
+    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return null;
+    return { r, c };
+  }
+
+  function isAdjacent(a, b) {
+    return (Math.abs(a.r - b.r) + Math.abs(a.c - b.c)) === 1;
+  }
+
+  let dragStart = null;
+
+  async function attemptSwap(a, b) {
+    if (busy) return;
+    if (!isAdjacent(a, b)) return;
+    busy = true;
+    selected = null;
+
+    // swap
+    [grid[a.r][a.c], grid[b.r][b.c]] = [grid[b.r][b.c], grid[a.r][a.c]];
+    await animateSwap(a, b);
+
+    const m = findMatches();
+    if (countMatched(m) === 0) {
+      // swap back
+      [grid[a.r][a.c], grid[b.r][b.c]] = [grid[b.r][b.c], grid[a.r][a.c]];
+      await animateSwap(a, b, true);
+      busy = false;
+      return;
+    }
+
+    moves--;
+    updateHUD();
+    await resolveBoard(1);
+
+    busy = false;
+    if (moves <= 0) endGame();
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (busy) return;
+    const cell = getCellFromEvent(e);
+    if (!cell) return;
+    canvas.setPointerCapture(e.pointerId);
+    dragStart = cell;
+    if (selected && isAdjacent(selected, cell)) {
+      attemptSwap(selected, cell);
+    } else {
+      selected = cell;
+    }
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragStart || busy) return;
+    const cell = getCellFromEvent(e);
+    if (!cell) return;
+    if (cell.r === dragStart.r && cell.c === dragStart.c) return;
+    if (isAdjacent(dragStart, cell)) {
+      const a = dragStart;
+      dragStart = null;
+      attemptSwap(a, cell);
+    }
+  });
+  canvas.addEventListener('pointerup', () => { dragStart = null; });
+  canvas.addEventListener('pointercancel', () => { dragStart = null; });
+
+  // ---------- HUD ----------
+  const $score = document.getElementById('score');
+  const $moves = document.getElementById('moves');
+  const $combo = document.getElementById('combo');
+
+  function updateHUD() {
+    $score.textContent = score;
+    $moves.textContent = moves;
+    $combo.textContent = 'x' + combo;
+  }
+
+  // ---------- GAME OVER ----------
+  function endGame() {
+    if (score > best) {
+      best = score;
+      localStorage.setItem('pixel_match3_best', best);
+    }
+    document.getElementById('ovScore').textContent = score;
+    document.getElementById('ovBest').textContent = best;
+    document.getElementById('overlay').classList.add('show');
+  }
+
+  document.getElementById('restart').addEventListener('click', startGame);
+  document.getElementById('ovRestart').addEventListener('click', startGame);
+  document.getElementById('shuffle').addEventListener('click', () => {
+    if (busy) return;
+    busy = true;
+    shuffleBoard(true);
+    busy = false;
+  });
+
+  function startGame() {
+    document.getElementById('overlay').classList.remove('show');
+    score = 0;
+    moves = START_MOVES;
+    combo = 1;
+    selected = null;
+    busy = false;
+    newGrid();
+    updateHUD();
+  }
+
+  // ---------- BOOT ----------
+  function fitCanvas() {
+    // scale via CSS to fit screen; canvas internal stays 384x384 for crisp pixels
+    const stage = canvas.parentElement;
+    const maxSide = Math.min(window.innerWidth - 32, 420, window.innerHeight - 280);
+    const side = Math.max(280, Math.floor(maxSide / 8) * 8);
+    canvas.style.width = side + 'px';
+    canvas.style.height = side + 'px';
+  }
+  window.addEventListener('resize', fitCanvas);
+  fitCanvas();
+
+  startGame();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
